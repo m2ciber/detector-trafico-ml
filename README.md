@@ -1,23 +1,50 @@
 # Detector de intrusiones de red con Machine Learning
 
-Prototipo de sistema de detección de intrusiones (NIDS) en Python. Entrena un clasificador Random Forest con metadatos de flujos de red (duración, paquetes, bytes, puerto de destino y flags SYN) para distinguir tráfico normal de escaneos de puertos, fuerza bruta SSH y ataques DDoS.
+Prototipo de sistema de detección de intrusiones (NIDS) en Python con un clasificador Random Forest. Tiene dos partes:
 
-## Problema que resuelve
+1. **Evaluación con datos reales (NSL-KDD):** entrena y mide el modelo con un conjunto de datos de referencia para la detección de intrusiones.
+2. **Demo sintética:** flujo completo con datos inventados (entrenar, guardar y clasificar flujos simulados), útil para ver el funcionamiento de principio a fin.
 
-Las reglas basadas solo en firmas fallan cuando un ataque varía su patrón. Este proyecto explora un enfoque complementario: aprender el comportamiento de cada tipo de tráfico a partir de sus estadísticas y generar alertas con un nivel de confianza.
+## Resultados con datos reales (NSL-KDD)
 
-## Cómo funciona
+### Medición oficial: entrena con `KDDTrain+`, prueba con `KDDTest+`
 
-```text
-[Datos de red] -> [pandas] -> [Entrenamiento Random Forest] -> [modelo .joblib] -> [Alertas]
-```
+Clasificación binaria (Normal / Ataque), 125.973 registros de entrenamiento y 22.544 de prueba.
 
-1. `entrenar_modelo.py` genera un conjunto de datos **sintético** con cuatro clases (normal, port scan, fuerza bruta SSH, DDoS), entrena el modelo, muestra métricas y la importancia de cada característica, y guarda el modelo.
-2. `detector_tiempo_real.py` carga el modelo y clasifica cinco flujos simulados, mostrando severidad y confianza.
+| Clase | Precisión | Recall | Registros |
+|---|---|---|---|
+| Normal | 0,67 | 0,97 | 9.711 |
+| Ataque | 0,97 | 0,63 | 12.833 |
+| **Acierto global** | | **0,78** | 22.544 |
 
-## Evidencia de ejecución
+Matriz de confusión (filas = real, columnas = predicho):
 
-![Ejecución del detector](captura.png)
+| | Predicho Normal | Predicho Ataque |
+|---|---|---|
+| **Real Normal** | 9.450 | 261 |
+| **Real Ataque** | 4.709 | 8.124 |
+
+**Lectura:** el modelo da pocas falsas alarmas (261 de 9.711, un 2,7 %), pero **no detecta el 37 % de los ataques** (4.709 de 12.833). En un sistema de detección de intrusiones, los ataques no detectados son el error más costoso. Una posible causa es que el conjunto de prueba incluye tipos de ataque ausentes en el de entrenamiento; no se ha verificado en este proyecto.
+
+![Resultados con NSL-KDD](captura_nslkdd.png)
+
+### Medición por familias de ataque (más optimista)
+
+Se reserva el 25 % de `KDDTrain+` (31.494 registros) y se entrena con el resto. Como los ataques de validación son del mismo tipo que los de entrenamiento, **estos resultados son más optimistas que los de la medición oficial**.
+
+| Familia | Recall | Observación |
+|---|---|---|
+| Normal | ~1,00 | |
+| DoS | ~1,00 | |
+| Probe | 0,99 | |
+| R2L | 0,94 | 235 de 249 |
+| U2R | 0,62 | solo 13 casos en validación (52 en entrenamiento): cifra poco fiable |
+
+## Datos
+
+- **Dataset:** [NSL-KDD](https://zenodo.org/records/17424143) (copia en Zenodo de un tercero, no del original). Se descargaron `KDDTrain+.txt` y `KDDTest+.txt` y se verificó su huella MD5.
+- **No se incluyen en el repositorio.** Hay que descargarlos y guardarlos en una carpeta `datos/`.
+- **Formato:** columnas separadas por tabuladores. `KDDTrain+.txt` tiene 43 columnas (41 características, etiqueta con el ataque concreto y nivel de dificultad). `KDDTest+.txt` tiene 42: su etiqueta solo distingue `normal` y `Attack`, por eso la medición oficial es binaria.
 
 ## Cómo ejecutarlo (Windows)
 
@@ -27,18 +54,35 @@ cd detector-trafico-ml
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+mkdir datos
+# Copiar KDDTrain+.txt y KDDTest+.txt dentro de la carpeta datos
+python entrenar_nslkdd.py
+```
+
+La demo sintética no necesita descargar nada:
+
+```powershell
 python entrenar_modelo.py
 python detector_tiempo_real.py
 ```
 
+![Demo con datos sintéticos](captura.png)
+
+## Archivos
+
+- `entrenar_nslkdd.py`: entrenamiento y evaluación con datos reales NSL-KDD.
+- `entrenar_modelo.py` y `detector_tiempo_real.py`: demo con datos sintéticos. El detector usa el modelo de la demo, no el entrenado con NSL-KDD. Con datos sintéticos el acierto es casi del 100 %, por lo que **no es una medida de rendimiento real**.
+
 ## Limitaciones
 
-- **Los datos son sintéticos.** Las cuatro clases están generadas con rangos muy distintos entre sí, por eso el modelo alcanza un 100 % de acierto. Ese resultado **no indica que funcione en una red real**: solo demuestra que el flujo de trabajo (datos, entrenamiento, evaluación, guardado y uso) es correcto.
-- La "monitorización en tiempo real" es una simulación con cinco flujos escritos a mano. No captura tráfico real.
-- No se ha evaluado con tráfico mezclado, ruido ni ataques que imiten al tráfico normal.
+- Los resultados salen de **una sola ejecución** con una semilla fija, sin validación cruzada.
+- Con U2R hay muy pocos ejemplos y su resultado no es fiable.
+- NSL-KDD es un conjunto de referencia antiguo. Que funcione bien en él no garantiza que lo haga en redes actuales.
+- La "monitorización en tiempo real" de la demo es una simulación con cinco flujos escritos a mano. No captura tráfico real.
 
 ## Próximos pasos
 
-- Entrenar con un conjunto de datos público (NSL-KDD o CIC-IDS2017) y comparar los resultados, que serán peores pero más realistas.
-- Medir falsos positivos y falsos negativos por separado.
-- Leer capturas reales de red (por ejemplo, archivos `.pcap`) en lugar de datos simulados.
+- Ajustar el umbral de decisión o dar más peso a los ataques para **reducir los ataques no detectados**, y medir el coste en falsas alarmas.
+- Analizar qué tipos de ataque de `KDDTest+` se escapan.
+- Probar otros modelos y validación cruzada.
+- Probar con un conjunto de datos más reciente, como CIC-IDS2017.
