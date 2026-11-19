@@ -1,4 +1,4 @@
-# Detector de intrusiones de red con Machine Learning
+## Detector de intrusiones de red con Machine Learning
 
 Prototipo de sistema de detección de intrusiones (NIDS) en Python con un clasificador Random Forest. Tiene dos partes:
 
@@ -40,6 +40,30 @@ Se reserva el 25 % de `KDDTrain+` (31.494 registros) y se entrena con el resto. 
 | R2L | 0,94 | 235 de 249 |
 | U2R | 0,62 | solo 13 casos en validación (52 en entrenamiento): cifra poco fiable |
 
+## Ajuste del umbral de decisión
+
+Por defecto el modelo marca "ataque" si está al menos un 50 % seguro. Bajar ese umbral detecta más ataques a cambio de más falsas alarmas. El umbral se eligió **sin mirar `KDDTest+`**:
+
+1. Se reservan cinco tipos de ataque (`ipsweep`, `teardrop`, `warezclient`, `guess_passwd`, `satan`) y el 25 % del tráfico normal de `KDDTrain+`. Se entrena sin ellos, para simular ataques nuevos.
+2. Se elige el umbral más alto que detecta al menos el 90 % de los ataques reservados: **0,1** (90,2 %).
+3. Se entrena el modelo final con todo `KDDTrain+` y se evalúa una sola vez en `KDDTest+`.
+
+Resultados en `KDDTest+` (22.544 registros):
+
+| Umbral | Ataques detectados | Falsas alarmas | Acierto |
+|---|---|---|---|
+| 0,5 (por defecto) | 63,3 % | 2,7 % | 78,0 % |
+| 0,3 | 72,1 % | 3,2 % | 82,8 % |
+| **0,1 (elegido)** | **87,9 %** | **9,8 %** | **88,9 %** |
+| 0,05 | 93,1 % | 10,8 % | 91,4 % |
+
+![Ajuste del umbral](captura_umbral.png)
+
+**Lectura:** con el umbral elegido se detectan casi 25 puntos más de ataques, pero las falsas alarmas pasan del 2,7 % al 9,8 %. Qué umbral conviene depende del coste de revisar alertas frente al de dejar pasar un ataque.
+
+**Limitación importante:** la validación predijo un 0,4 % de falsas alarmas con el umbral 0,1, y en la prueba oficial salió un 9,8 %. Probablemente porque el tráfico normal de la validación es del mismo tipo que el del entrenamiento y el de `KDDTest+` no (no se ha comprobado). El método sirve para elegir el nivel de detección, no para predecir las falsas alarmas. Además, es una sola ejecución con una semilla fija y solo cinco tipos de ataque reservados.
+
+Para reproducirlo: `python ajustar_umbral.py`.
 ## Datos
 
 - **Dataset:** [NSL-KDD](https://zenodo.org/records/17424143) (copia en Zenodo de un tercero, no del original). Se descargaron `KDDTrain+.txt` y `KDDTest+.txt` y se verificó su huella MD5.
@@ -82,7 +106,7 @@ python detector_tiempo_real.py
 
 ## Próximos pasos
 
-- Ajustar el umbral de decisión o dar más peso a los ataques para **reducir los ataques no detectados**, y medir el coste en falsas alarmas.
+- - Dar más peso a los ataques durante el entrenamiento y compararlo con el ajuste de umbral.
 - Analizar qué tipos de ataque de `KDDTest+` se escapan.
 - Probar otros modelos y validación cruzada.
 - Probar con un conjunto de datos más reciente, como CIC-IDS2017.
