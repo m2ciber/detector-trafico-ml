@@ -60,6 +60,7 @@ Resultados en `KDDTest+` (22.544 registros):
 ![Ajuste del umbral](captura_umbral.png)
 
 **Lectura:** con el umbral elegido se detectan casi 25 puntos más de ataques, pero las falsas alarmas pasan del 2,7 % al 9,8 %. Qué umbral conviene depende del coste de revisar alertas frente al de dejar pasar un ataque.
+En números absolutos sobre `KDDTest+`: con el umbral 0,5 se escapan 4.709 ataques y hay 261 falsas alarmas; con el 0,1 se escapan 1.554 y hay 948. Es decir, unos 4,6 ataques menos sin detectar por cada falsa alarma adicional.
 
 **Limitación importante:** la validación predijo un 0,4 % de falsas alarmas con el umbral 0,1, y en la prueba oficial salió un 9,8 %. Probablemente porque el tráfico normal de la validación es del mismo tipo que el del entrenamiento y el de `KDDTest+` no (no se ha comprobado). El método sirve para elegir el nivel de detección, no para predecir las falsas alarmas. Además, es una sola ejecución con una semilla fija y solo cinco tipos de ataque reservados.
 
